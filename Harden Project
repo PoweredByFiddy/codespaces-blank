@@ -1,0 +1,170 @@
+rm(list=ls())
+##
+install.packages("tidyverse")
+install.packages("rpart")
+install.packages("rpart.plot")
+library(rpart)
+library(rpart.plot)
+library(tidyverse) 
+##
+
+#set Dependent Variable as "SUCCESS" (change SHOT_RESULT to 1 or 0 )
+Harden <- hardenstats %>% mutate (SUCCESS=ifelse(SHOT_RESULT=="made",1,0))
+
+
+#change categorical to binary (location, win, SHOT_RESULT)
+Harden <- Harden %>% mutate (HOMEAWAY=ifelse(LOCATION=="H",1,0))
+Harden <- Harden %>% mutate (WINLOSS=ifelse(LOCATION=="W",1,0))
+
+#clean data
+Harden <- subset(Harden,select = -c(GAME_ID,MATCHUP,SHOT_NUMBER,LOCATION,W,player_id,CLOSEST_DEFENDER,CLOSEST_DEFENDER_PLAYER_ID,player_name,SHOT_RESULT))
+
+#plots
+barplot(Harden$SHOT_CLOCK)
+plot(Harden$SHOT_DIST,Harden$SUCCESS)
+plot(harden)
+barplot(Harden$SHOT_DIST)
+plot(Harden$SUCCESS)
+plot(Harden$CLOSE_DEF_DIST,Harden$SUCCESS)
+boxplot(Harden$CLOSE_DEF_DIST,Harden$SUCCESS)
+hist(Harden$CLOSE_DEF_DIST)
+hist(Harden$SUCCESS)
+hist(Harden$PERIOD)
+
+#Period Success Rates
+PERIOD1= Harden[Harden$PERIOD== 1, ]
+PERIOD1AVE= round(mean(PERIOD1$SUCCESS)*100,2)
+PERIOD1B= 100-PERIOD1AVE
+PERIOD1C= c(PERIOD1AVE,PERIOD1B)
+P1Count= NROW(PERIOD1)
+LBLS1= c(paste0(PERIOD1AVE,"% Made"),paste0(PERIOD1B,"% Miss"))
+title1=c("P1 Shots Total=\n",paste0(P1Count),"")
+
+
+PERIOD2= Harden[Harden$PERIOD== 2, ]
+PERIOD2AVE= round(mean(PERIOD2$SUCCESS)*100,2)
+PERIOD2B= 100-PERIOD2AVE
+PERIOD2C= c(PERIOD2AVE,PERIOD2B)
+P2Count= NROW(PERIOD2)
+LBLS2= c(paste0(PERIOD2AVE,"% Made"),paste0(PERIOD2B,"% Miss"))
+title2=c("P2 Shots Total=\n",paste0(P2Count),"")
+
+PERIOD3= Harden[Harden$PERIOD== 3, ]
+PERIOD3AVE= round(mean(PERIOD3$SUCCESS)*100,2)
+PERIOD3B= 100-PERIOD3AVE
+PERIOD3C= c(PERIOD3AVE,PERIOD3B)
+P3Count= NROW(PERIOD3)
+LBLS3= c(paste0(PERIOD3AVE,"% Made"),paste0(PERIOD3B,"% Miss"))
+title3=c("P3 Shots Total=\n",paste0(P3Count),"")
+
+PERIOD4= Harden[Harden$PERIOD== 4, ]
+PERIOD4AVE= round(mean(PERIOD4$SUCCESS)*100,2)
+PERIOD4B= 100-PERIOD4AVE
+PERIOD4C= c(PERIOD4AVE,PERIOD4B)
+P4Count= NROW(PERIOD4)
+LBLS4= c(paste0(PERIOD4AVE,"% Made"),paste0(PERIOD4B,"% Miss"))
+title4=c("P4 Shots Total=\n",paste0(P4Count),"")
+
+PERIOD5= Harden[Harden$PERIOD== 5, ]
+PERIOD5AVE= round(mean(PERIOD5$SUCCESS)*100,2)
+PERIOD5B= 100-PERIOD5AVE
+PERIOD5C= c(PERIOD5AVE,PERIOD5B)
+P5Count= NROW(PERIOD5)
+LBLS5= c(paste0(PERIOD5AVE,"% Made"),paste0(PERIOD5B,"% Miss"))
+title5=c("P5 Shots Total=\n",paste0(P5Count),"")
+
+PERIODCOMP= c(PERIOD1AVE,PERIOD2AVE,PERIOD3AVE,PERIOD4AVE)
+lblscomp=c(paste0(PERIOD1AVE,"% P1"),paste0(PERIOD2AVE,"% P2"),paste0(PERIOD3AVE,"% P3"),paste0(PERIOD4AVE,"% P4"))
+
+
+layout(matrix(c(1,1,2,3,4,5),3,2,byrow=TRUE))
+barplot(PERIODCOMP,names.arg= lblscomp, main="Shot Success by Period")
+pie(PERIOD1C, labels = LBLS1, main= title1)
+pie(PERIOD2C, labels = LBLS2, main= title2)
+pie(PERIOD3C, labels = LBLS3, main= title3)
+pie(PERIOD4C, labels = LBLS4, main= title4)
+#pie(PERIOD5C, labels = LBLS5, main= title5)
+
+
+## Ligistic Regression
+#glm1 <- glm(SUCCESS ~ .-OBS -FGM -PTS, data=Train, family="binomial")
+
+#step.glm1<-step(glm1,direction="backward",trace=0)
+#summary(step.glm1)
+
+#predVal <- predict(glm1, type="response",newdata = Validation)
+
+#MyPredLabels=as.factor(ifelse(predVal > 0.5, 1, 0))
+#confusionMatrix(MyPredLabels, as.factor(Validation$SUCCESS), positive="1")
+
+
+#percent accurate
+percentage= mean(Harden$SUCCESS)*100
+
+
+
+#split into training and validation 70/30
+set.seed(1)
+Train <- Harden %>% sample_frac(0.7) 
+Validation <- Harden %>% anti_join(Train, by="OBS") 
+
+
+#Linear regression
+lm1 <- glm(IsProfitable ~ .-OBS - Harden_EXTENDED -NPV, data=Train, family="binomial")
+
+step.lm<-step(lm1,direction="backward",trace=0)
+summary(step.lm)
+
+
+#kNN method
+
+Train.norm <- Train
+Validation.norm <- Validation
+
+# use preProcess() from the caret package to normalize the data
+#First identify the columns that need to be normalized
+cols <- c(2:5,6,8,14)
+#then normalize 
+norm.values <- preProcess(Train[, cols], method=c("center", "scale"))
+#We then use the norm.values to scale both the training and the validation data
+Train.norm[, cols] <- predict(norm.values, Train[, cols])
+Validation.norm[, cols] <- predict(norm.values, Validation[, cols])
+summary(Train.norm)
+
+# initialize a data frame with two columns: k, and accuracy (initiated with a numerical sequence for k and 0 for accuracy).
+accuracy.df <- data.frame(k = seq(1, maxk, 1), accuracy = rep(0, maxk))
+
+#we do not want to run kNN on NPV so lets make sure we define the columns that we want to use carefully
+knn.cols <-c(2:14,19:52)
+
+#rather than updating k in multiple places, define the max k
+maxk=20
+
+# compute knn for different k on validation.
+for(i in 1:maxk) {
+  knn.pred <- knn(train = Train.norm[, knn.cols], test = Validation.norm[, knn.cols] , 
+                  cl = Train.norm$IsProfitable, k = i)
+  accuracy.df[i, 2] <- confusionMatrix(knn.pred, as.factor(Validation.norm$IsProfitable))$overall[1] 
+}
+#plot the results
+plot(accuracy.df, type="b")
+
+#finding the index of the maximum value 
+MaxIndex=which(accuracy.df$accuracy==max(accuracy.df$accuracy))
+
+#the corresponding accuracy
+max(accuracy.df$accuracy)
+
+
+
+#after finding k, plug in to next prediction...
+#run knn with k=11
+knn.pred <- knn(train = Train.norm[, knn.cols], test = Validation.norm[, knn.cols] , 
+                cl = Train.norm$IsProfitable, k = 11)
+
+#obtain the performance measures
+confusionMatrix(knn.pred, as.factor(Validation.norm$IsProfitable),positive = "1")
+
+#calculate the corresponding NPV
+ValNPVCalc<-sum(ifelse(knn.pred==1,Validation$NPV,0))
+
